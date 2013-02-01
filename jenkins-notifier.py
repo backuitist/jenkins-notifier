@@ -46,18 +46,24 @@ class JenkinsNotifier:
 		self.statusIcon.set_from_file(icon)
 		self.statusIcon.set_tooltip(msg)
 
-	def success(self,lastBuild):
+	def success(self,lastBuild,changeSet):
 		if self.statusIconImg != self.SUCCESS_IMG:
-			msg = 'Build #' + str(lastBuild) + ' is a Success'
+			msg = 'Build #' + str(lastBuild) + ' is a Success\n' + changeSet
 			print msg
 			self.updateStatusIcon(self.SUCCESS_IMG, msg)
 			self.notifySuccess(msg)
 
-	def failure(self,lastBuild):
-		msg = 'Build #' + str(lastBuild) + ' Failed!'
+	def failure(self,lastBuild,changeSet):
+		msg = 'Build #' + str(lastBuild) + ' Failed!\n' + changeSet
 		print msg
 		self.updateStatusIcon(self.FAILURE_IMG, msg)
 		self.notifyFailure(msg)
+
+	def formatChangeSet(self,buildNo):
+		feed = eval(urllib.urlopen(self.URL + '/' + str(buildNo) + '/api/python').read())
+		items = feed['changeSet']['items']
+		changeSet = map(lambda item: '- [' + item['author']['fullName'] + '] ' + item['comment'], items)
+		return ''.join(changeSet)
 
 	def refresh(self):
 		try:
@@ -72,11 +78,12 @@ class JenkinsNotifier:
 
 					self.lastKnownBuild = lastBuild			
 					lastSuccess = feed['lastSuccessfulBuild']
+					changeSet = self.formatChangeSet(lastBuild)
 					# print "Last success", lastSuccess
 					if lastSuccess is None or lastSuccess['number'] != lastBuild:
-						self.failure(lastBuild)
+						self.failure(lastBuild,changeSet)
 					else:
-						self.success(lastBuild)
+						self.success(lastBuild,changeSet)
 				# return true to keep calling that function, see gobject.timeout_add
 			return True
 		except:
