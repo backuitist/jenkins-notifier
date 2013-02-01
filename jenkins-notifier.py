@@ -2,7 +2,7 @@
 
 import pynotify 
 import time 
-import urllib
+import urllib2
 import pygtk
 pygtk.require('2.0')
 import gtk
@@ -10,18 +10,36 @@ import gobject
 import os
 import sys
 import traceback
+import base64
 
 class JenkinsNotifier:
 	JOB = 'Backuity'
+
 	URL = 'http://localhost:8080/job/backuity'
+	# use None if no authentication is needed
+	USER = 'admin'
+	# API token, see http://localhost:8080/user/admin/configure (replace admin by the user)
+	PASSWORD = '7ec35dc206ffb7ae840a2311d7741111'
+
 	dir_path = os.path.dirname(__file__)
 	SUCCESS_IMG = os.path.abspath(dir_path + '/jenkins-green.png')
 	FAILURE_IMG = os.path.abspath(dir_path + '/jenkins-red.png')
 	UNKNOWN_IMG = os.path.abspath(dir_path + '/jenkins-grey.png')
+
 	statusIconImg = UNKNOWN_IMG
 	statusIcon = gtk.StatusIcon()
 	notification = None
 	lastKnownBuild = None
+
+	def openUrl(self,url):
+		if self.USER is not None:
+			request = urllib2.Request(url)
+			base64string = base64.encodestring('%s:%s' % (self.USER, self.PASSWORD)).replace('\n', '')
+			request.add_header("Authorization", "Basic %s" % base64string)   
+			return urllib2.urlopen(request)
+		else:
+			return urllib2.urlopen(url)
+			
 
 	def notifySuccess(self,msg): 
 		self.closeNotification()
@@ -60,7 +78,7 @@ class JenkinsNotifier:
 		self.notifyFailure(msg)
 
 	def formatChangeSet(self,buildNo):
-		feed = eval(urllib.urlopen(self.URL + '/' + str(buildNo) + '/api/python').read())
+		feed = eval(self.openUrl(self.URL + '/' + str(buildNo) + '/api/python').read())
 		items = feed['changeSet']['items']
 		changeSet = map(lambda item: '- [' + item['author']['fullName'] + '] ' + item['comment'], items)
 		return ''.join(changeSet)
@@ -68,7 +86,7 @@ class JenkinsNotifier:
 	def refresh(self):
 		try:
 			# print "refreshing, lastKnownBuild is ", self.lastKnownBuild
-			feed = eval(urllib.urlopen(self.URL + '/api/python').read())
+			feed = eval(self.openUrl(self.URL + '/api/python').read())
 			lastBuild = feed['lastCompletedBuild']
 			# print "lastBuild is now ", lastBuild
 			if lastBuild is not None:
