@@ -65,10 +65,11 @@ class JenkinsNotifier:
 		self.statusIcon.set_tooltip(msg)
 
 	def success(self,lastBuild,changeSet):
-		if self.statusIconImg != self.SUCCESS_IMG:
-			msg = 'Build #' + str(lastBuild) + ' is a Success\n' + changeSet
-			print msg
-			self.updateStatusIcon(self.SUCCESS_IMG, msg)
+		notify = self.statusIconImg != self.SUCCESS_IMG		
+		msg = 'Build #' + str(lastBuild) + ' is a Success\n' + changeSet
+		print msg		
+		self.updateStatusIcon(self.SUCCESS_IMG, msg)
+		if notify:
 			self.notifySuccess(msg)
 
 	def failure(self,lastBuild,changeSet):
