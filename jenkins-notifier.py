@@ -2,7 +2,10 @@
 
 import pynotify
 import time 
-import urllib2
+import urllib3
+
+from urllib3.exceptions import HTTPError
+
 import pygtk
 pygtk.require('2.0')
 import gtk
@@ -32,13 +35,12 @@ class JenkinsNotifier:
 	lastKnownBuild = None
 
 	def openUrl(self,url):
+		conn = urllib3.connection_from_url(url)
 		if self.USER is not None:
-			request = urllib2.Request(url)
-			base64string = base64.encodestring('%s:%s' % (self.USER, self.PASSWORD)).replace('\n', '')
-			request.add_header("Authorization", "Basic %s" % base64string)   
-			return urllib2.urlopen(request)
+			authHeaders = urllib3.util.make_headers(basic_auth='%s:%s' % (self.USER, self.PASSWORD))
+			return conn.request('GET',url, headers=authHeaders).data
 		else:
-			return urllib2.urlopen(url)
+			return conn.get_url('GET',url).data
 			
 
 	def notifySuccess(self,msg): 
@@ -79,15 +81,20 @@ class JenkinsNotifier:
 		self.notifyFailure(msg)
 
 	def formatChangeSet(self,buildNo):
-		feed = eval(self.openUrl(self.URL + '/' + str(buildNo) + '/api/python').read())
+		feed = eval(self.openUrl(self.URL + '/' + str(buildNo) + '/api/python'))
 		items = feed['changeSet']['items']
 		changeSet = map(lambda item: '- [' + item['author']['fullName'] + '] ' + item['comment'], items)
 		return ''.join(changeSet)
 
+	def jenkinsError(self,msg):
+		self.updateStatusIcon(self.UNKNOWN_IMG, msg)
+		self.lastKnownBuild = None
+
+
 	def refresh(self):
 		try:
 			# print "refreshing, lastKnownBuild is ", self.lastKnownBuild
-			feed = eval(self.openUrl(self.URL + '/api/python').read())
+			feed = eval(self.openUrl(self.URL + '/api/python'))
 			lastBuild = feed['lastCompletedBuild']
 			# print "lastBuild is now ", lastBuild
 			if lastBuild is not None:
@@ -106,18 +113,20 @@ class JenkinsNotifier:
 			# return true to keep calling that function, see gobject.timeout_add
 			return True
 
-		except urllib2.URLError as error:
-			print "Cannot connect to", self.URL, error.args, error.message
-			self.updateStatusIcon(self.UNKNOWN_IMG, 'Unable to connect to Jenkins, trying later ...')
+		except HTTPError, error:
+			print "Connection error", error.message
+			self.jenkinsError('Unable to connect to Jenkins, trying later ...')
+			return True
+		
+		except SyntaxError, error:
+			print "Cannot parse Jenkins results, probably starting up.", error.message
+			self.jenkinsError('Cannot parse Jenkins results (probably starting up), trying later ...')
 			return True
 
 		except:
 			print "Got unexpected error!"
 			traceback.print_exc(file=sys.stdout)
-			# Initialy I was doing
-			# sys.exit()
-			# but it turns out some network errors come up as non-URLError
-			return True
+			sys.exit()
 
 	def __init__(self):
 		pynotify.init('Jenkins Notify') 
